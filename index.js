@@ -1,0 +1,76 @@
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+require("dotenv").config();
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcryptjs");
+const app = express();
+const PORT = process.env.PORT || 8080;
+const MONGOURL = process.env.MONGOURL;
+
+app.use(express.json());
+
+app.use(
+  cors({
+    origin: "*",
+  })
+);
+
+mongoose.connect(MONGO, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+});
+
+const userSchema = new mongoose.Schema({
+  username: String,
+  password: String,
+});
+const User = mongoose.model("User", userSchema);
+
+const taskSchema = new mongoose.Schema({
+  text: String,
+  status: String,
+  priority: String,
+  userId: mongoose.Schema.Types.ObjectId,
+});
+const Task = mongoose.model("Task", taskSchema);
+
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+  const user = await User.findOne({ username });
+  if (!user || !(await bcrypt.compare(password, user.password))) {
+    return res.status(401).json({ message: "Invalid credentials" });
+  }
+  const token = jwt.sign({ userId: user._id }, "secret", { expiresIn: "1h" });
+  res.json({ token });
+});
+
+const authMiddleware = (req, res, next) => {
+  const token = req.header("Authorization")?.replace("Bearer ", "");
+  if (!token) return res.status(401).json({ message: "No token" });
+  try {
+    const decoded = jwt.verify(token, "secret");
+    req.userId = decoded.userId;
+    next();
+  } catch (e) {
+    res.status(401).json({ message: "Invalid token" });
+  }
+};
+
+app.get("/tasks", authMiddleware, async (req, res) => {
+  const tasks = await Task.find({ userId: req.userId });
+  res.json(tasks);
+});
+
+app.post("/tasks", authMiddleware, async (req, res) => {
+  const task = new Task({ ...req.body, userId: req.userId });
+  await task.save();
+  res.json(task);
+});
+
+app.delete("/tasks/:id", authMiddleware, async (req, res) => {
+  await Task.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+  res.json({ message: "Task deleted" });
+});
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
