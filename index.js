@@ -16,7 +16,7 @@ app.use(
   })
 );
 
-mongoose.connect(MONGO, {
+mongoose.connect(MONGOURL, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 });
